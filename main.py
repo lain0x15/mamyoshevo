@@ -1,6 +1,6 @@
 import discord, asyncio
 from discord.ext import commands
-from youtube_dl import YoutubeDL
+import yt_dlp
 import os
 from dotenv import load_dotenv, dotenv_values
 
@@ -96,15 +96,30 @@ if __name__ == '__main__':
         await bot.play(ctx, discord.FFmpegPCMAudio('Mamyoshevo.mp3'))
 
     @bot.tree.command(name='ютуб', description='Запустить аудио с ютуба', guild=bot.guild)
-    async def play_youtube(ctx):
-        YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist': 'False'}
-        FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5','options': '-vn'}
-        with YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info("https://www.youtube.com/watch?v=he_MGvDFT7I", download=False)
-        URL = info['formats'][0]['url']
-        await bot.play(
-            ctx,
-            discord.FFmpegPCMAudio(executable="ffmpeg\\ffmpeg.exe", source=URL, **FFMPEG_OPTIONS)
-        )
+    async def play_youtube(ctx, url: str):
+        YTDL_OPTIONS = {
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+            'quiet': True,
+        }
+        FFMPEG_OPTIONS = {
+            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+            'options': '-vn',
+        }
+
+        ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
+        try:
+            data = ytdl.extract_info(url, download=False)
+            # Проверяем, является ли объект плейлистом
+            if 'entries' in data:
+                data = data['entries'][0]
+        
+            filename = data['url']
+            title = data.get('title', 'Аудиозапись')
+        except Exception as e:
+            print(f"{e}")
+            return
+
+        await bot.play(ctx, discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS))
 
     bot.run(os.getenv("token"))
