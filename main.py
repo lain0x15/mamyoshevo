@@ -1,0 +1,110 @@
+import discord, asyncio
+from discord.ext import commands
+from youtube_dl import YoutubeDL
+import os
+from dotenv import load_dotenv, dotenv_values
+
+
+class mamyoshevo (commands.Bot):
+    def __init__(self, guild, **kwargs):
+        self.guild = discord.Object(id=guild)
+        self.voice_disconnect_tasks = {}
+        super().__init__(**kwargs)
+
+    async def on_ready(self):
+        print(f'We have logged in as {self.user}')
+        try:
+            synced = await self.tree.sync(guild=self.guild)
+        except Exception as e:
+            print(f'{e}')
+
+
+    async def on_voice_state_update(self, member, before, after):
+        if before.channel is None:
+            return
+
+        guild = before.channel.guild
+        voice_client = guild.voice_client
+
+        # Если бота нет в голосовом канале на этом сервере, ничего не делаем
+        if voice_client is None:
+            return
+
+        # Проверяем, что люди вышли именно из того канала, где сидит бот
+        if voice_client.channel.id == before.channel.id:
+
+            # Считаем количество реальных пользователей (исключая ботов)
+            real_users = [m for m in voice_client.channel.members if not m.bot]
+
+            # Если в канале остались только боты (или он совсем пуст)
+            if len(real_users) == 0:
+
+                # Если таймер для этого сервера уже запущен, не создаем дубликат
+                if guild.id in self.voice_disconnect_tasks and not self.voice_disconnect_tasks[guild.id].done():
+                    return
+
+                # Запускаем задачу ожидания 5 минут (300 секунд)
+                task = asyncio.create_task(self.wait_and_disconnect(guild, voice_client))
+                self.voice_disconnect_tasks[guild.id] = task
+
+
+    async def wait_and_disconnect(self, guild, voice_client):
+        try:
+            print(f"[{guild.name}] Канал пуст. Запущен таймер отключения на 1 минуту")
+            await asyncio.sleep(60)  # Ожидание 1 минуты
+
+            # По истечении времени проверяем еще раз, пуст ли канал
+            if voice_client.is_connected():
+                real_users = [m for m in voice_client.channel.members if not m.bot]
+                if len(real_users) == 0:
+                    await voice_client.disconnect()
+                    print(f"[{guild.name}] Бот отключился из-за отсутствия активности.")
+        except asyncio.CancelledError:
+            # Сюда код попадает, если мы вызвали task.cancel() при возвращении людей
+            pass
+
+    async def play(self, ctx, arg):
+        if ctx.user.voice is None:
+            await ctx.response.send_message("Вы должны находиться в голосовом канале, чтобы использовать эту команду!")
+            return
+
+        channel = ctx.user.voice.channel
+        voice_client = ctx.guild.voice_client
+        if voice_client is not None:
+            await voice_client.move_to(channel)
+        else:
+            voice_client = await channel.connect()
+
+        if voice_client.is_playing():
+            voice_client.stop()
+
+        await ctx.response.send_message('Запускаю брат')
+        voice_client.play(arg)
+
+if __name__ == '__main__':
+    load_dotenv()
+    intents = discord.Intents.default()
+    intents.message_content = True
+    bot = mamyoshevo(guild=os.getenv("guild"), command_prefix="!", intents=intents)
+
+    @bot.tree.command(name='пинг', description='пинг', guild=bot.guild)
+    async def ping(ctx):
+        await ctx.response.send_message('пук')
+
+    @bot.tree.command(name='мамёшиво', description='Запустить музыку про великое Мамёшиво', guild=bot.guild)
+    async def play_mamyoshevo(ctx):
+        await bot.play(ctx, discord.FFmpegPCMAudio('Mamyoshevo.mp3'))
+
+    @bot.tree.command(name='ютуб', description='Запустить аудио с ютуба', guild=bot.guild)
+    async def play_youtube(ctx):
+        YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist': 'False'}
+        FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5','options': '-vn'}
+        with YoutubeDL(YDL_OPTIONS) as ydl:
+            info = ydl.extract_info("https://www.youtube.com/watch?v=he_MGvDFT7I", download=False)
+        URL = info['formats'][0]['url']
+        await bot.play(
+            ctx,
+            discord.FFmpegPCMAudio(executable="ffmpeg\\ffmpeg.exe", source=URL, **FFMPEG_OPTIONS)
+        )
+
+    bot.run(os.getenv("token"))
