@@ -2,8 +2,9 @@ import discord, asyncio
 from discord.ext import commands
 import yt_dlp
 import os
+import io
 from dotenv import load_dotenv, dotenv_values
-
+from gtts import gTTS
 
 class mamyoshevo (commands.Bot):
     def __init__(self, guild, **kwargs):
@@ -121,5 +122,23 @@ if __name__ == '__main__':
             return
 
         await bot.play(ctx, discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS))
+
+    @bot.tree.command(name='сказать', description='сказать текст', guild=bot.guild)
+    async def play_youtube(ctx, msg: str):
+        mp3_fp = io.BytesIO()
+        tts = gTTS(text=msg, lang='ru', slow=False)
+        tts.write_to_fp(mp3_fp)
+        mp3_fp.seek(0)
+
+        try:
+            audio_source = discord.FFmpegPCMAudio(
+                mp3_fp,
+                pipe=True,
+                before_options="-f mp3",
+                options="-f s16le -ar 48000 -ac 2"
+            )
+            await bot.play(ctx, audio_source)
+        finally:
+            mp3_fp.close()
 
     bot.run(os.getenv("token"))
