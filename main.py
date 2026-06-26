@@ -124,7 +124,7 @@ if __name__ == '__main__':
         await bot.play(ctx, discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS))
 
     @bot.tree.command(name='сказать', description='сказать текст', guild=bot.guild)
-    async def play_youtube(ctx, msg: str):
+    async def say(ctx, msg: str):
         mp3_fp = io.BytesIO()
         tts = gTTS(text=msg, lang='ru', slow=False)
         tts.write_to_fp(mp3_fp)
